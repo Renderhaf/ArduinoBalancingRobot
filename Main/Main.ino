@@ -1,7 +1,6 @@
 #include <Wire.h>
 #include <SoftwareSerial.h>
 #include "PID_v1.h"
-#include "MPU6050_tockn.h"
 
 int minVal = 205, maxVal = 402;
 const int MPU_addr=0x68; int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
@@ -29,13 +28,41 @@ double input = 0;
 double output = 0;
 double setpoint = 0;
 
-double Kp = 37;
+double Kp = 40;
 double Ki = 0;
-double Kd = 0;
+double Kd = 0.001;
 
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
-//MPU6050 mpu6050(Wire);
+const int rollLength = 5;
+int rollingMedian[rollLength];
+int currentMedianArrayLocation = 0;
+
+int TIMES_SKIP = 10;
+int TICKS = 0;
+
+void sort(int a[], int n) {
+   int i, j, min, temp;
+   for (i = 0; i < n - 1; i++) {
+      min = i;
+      for (j = i + 1; j < n; j++)
+         if (a[j] < a[min])
+            min = j;
+      temp = a[i];
+      a[i] = a[min];
+      a[min] = temp;
+   }
+}
+
+double getMedian(int a[], int n) 
+{ 
+    sort(a, a+n); 
+  
+    if (n % 2 != 0) 
+       return (double)a[n/2]; 
+      
+    return (double)(a[(n-1)/2] + a[n/2])/2.0; 
+} 
 
 void setup(){
 
@@ -58,10 +85,6 @@ void setup(){
   pid.SetMode(AUTOMATIC);
   pid.SetSampleTime(10);
   pid.SetOutputLimits(-255, 255);  
-
-//  Wire.begin();
-//  mpu6050.begin();
-//  mpu6050.setGyroOffsets(-1.21,2.05,0.4);
 }
  
 void loop(){
@@ -77,25 +100,33 @@ void loop(){
   yAng = map(AcY,minVal,maxVal,-90,90);
   zAng = map(AcZ,minVal,maxVal,-90,90);
 
-  x = RAD_TO_DEG * (atan2(-yAng, -zAng)+PI);
-  y = RAD_TO_DEG * (atan2(-xAng, -zAng)+PI);
-  z = RAD_TO_DEG * (atan2(-yAng, -xAng)+PI);
+  x = RAD_TO_DEG * (atan2(-yAng, -zAng));
+  y = RAD_TO_DEG * (atan2(-xAng, -zAng));
+  z = RAD_TO_DEG * (atan2(-yAng, -xAng));
 
+  if (TICKS % TIMES_SKIP == 0){
+    TICKS = 0;
+    rollingMedian[currentMedianArrayLocation] = y;
 
-//  mpu6050.update();
-//  y = mpu6050.getAngleY();
-  currAng = y - 178;
+    int cpyarr[rollLength];
+    for (int i = 0; i < rollLength; i++){
+      cpyarr[i] = rollingMedian[i];
+    }
+    currAng = getMedian(cpyarr, rollLength); 
+
+    currentMedianArrayLocation = (currentMedianArrayLocation + 1) % 5;
+  }
 
   input = currAng;
   pid.Compute();
   currPow = output;
-  
-  if (currPow > 255){
-    currPow = 255;
-  }
 
- 
- 
+//  if (currPow > 255){
+//    currPow = 255;
+//  } else if (currPow < -255){
+//    currPow = -255;
+//  }
+
   analogWrite(pwm,abs(currPow));
   if (currPow < 0){
     digitalWrite(in_1,LOW); digitalWrite(in_2,HIGH);
@@ -103,7 +134,9 @@ void loop(){
     digitalWrite(in_1,HIGH); digitalWrite(in_2,LOW);
   }
 
-  Serial.print("ANG = "); Serial.print(currAng); Serial.print(" Motor Power = "); Serial.println(currPow);
+  Serial.print(currAng);
+//  Serial.print("ANG = "  ); Serial.println(currAng); 
+//  Serial.print(" Motor Power = "); Serial.println(currPow);
 // 
 //  while (HC12.available()) {        // If HC-12 has data
 //    Serial.write(HC12.read());      // Send the data to Serial monitor
@@ -113,4 +146,5 @@ void loop(){
 ////  }
 
 //  delay(300);
+  TICKS++;
 }

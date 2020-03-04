@@ -28,7 +28,7 @@ double input = 0;
 double output = 0;
 double setpoint = 0;
 
-double Kp = 40;
+double Kp = 30;
 double Ki = 0;
 double Kd = 0.001;
 
@@ -40,6 +40,8 @@ int currentMedianArrayLocation = 0;
 
 int TIMES_SKIP = 10;
 int TICKS = 0;
+
+int radioVal = 0;
 
 void sort(int a[], int n) {
    int i, j, min, temp;
@@ -64,6 +66,8 @@ double getMedian(int a[], int n)
     return (double)(a[(n-1)/2] + a[n/2])/2.0; 
 } 
 
+float distSensor;
+
 void setup(){
 
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
@@ -76,6 +80,8 @@ void setup(){
   Wire.endTransmission(true);
  
   pinMode(13, OUTPUT);
+  pinMode(7, OUTPUT);
+  pinMode(4, INPUT);
 
   pinMode(pwm,OUTPUT); pinMode(in_1,OUTPUT); pinMode(in_2,OUTPUT);
 
@@ -84,7 +90,11 @@ void setup(){
 
   pid.SetMode(AUTOMATIC);
   pid.SetSampleTime(10);
-  pid.SetOutputLimits(-255, 255);  
+  pid.SetOutputLimits(-255, 255); 
+
+  distSensor = 0;
+
+  radioVal = 2;
 }
  
 void loop(){
@@ -120,12 +130,23 @@ void loop(){
   input = currAng;
   pid.Compute();
   currPow = output;
+  
+  distSensor = analogRead(A3);
+  if (distSensor < 600){
+    currPow = 0;
+  }
 
-//  if (currPow > 255){
-//    currPow = 255;
-//  } else if (currPow < -255){
-//    currPow = -255;
-//  }
+  if (HC12.available()){
+    radioVal = HC12.read();
+  }
+
+  if (radioVal != 2){
+    if (radioVal == 0){
+      currPow = 150;
+    } else {
+      currPow = -150;
+    }
+  }
 
   analogWrite(pwm,abs(currPow));
   if (currPow < 0){
@@ -133,8 +154,10 @@ void loop(){
   } else {
     digitalWrite(in_1,HIGH); digitalWrite(in_2,LOW);
   }
+  
+  
 
-  Serial.print(currAng);
+  
 //  Serial.print("ANG = "  ); Serial.println(currAng); 
 //  Serial.print(" Motor Power = "); Serial.println(currPow);
 // 
